@@ -15,6 +15,8 @@ type Msg
     | EditUpload EditEvent
     | SaveResponse (Result Http.Error FileData)
     | ListFiles (Result Http.Error (List FileData))
+    | DeleteFile FileID
+    | DeleteResponse (Result Http.Error ())
 
 
 type EditEvent

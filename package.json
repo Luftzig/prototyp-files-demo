@@ -12,7 +12,7 @@
   "scripts": {
     "build": "elm-make src/Main.elm --output dist/Main.js && cp src/index.html dist/index.html",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "json-server --middleware ./server.js --static dist db.json"
+    "start": "json-server --middleware ./addCreated.js --static dist db.json"
 
   },
   "author": "Yoav Luft",

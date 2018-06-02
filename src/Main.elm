@@ -7,17 +7,7 @@ import Html exposing (program)
 import Http
 import Json.Encode as JE
 import Json.Decode as JD
-import Model
-    exposing
-        ( EditEvent(..)
-        , EditingStatus(..)
-        , File
-        , FileData
-        , FileEdited(..)
-        , FileValidationError(UnsupportedFile)
-        , Model
-        , Msg(..)
-        )
+import Model exposing (EditEvent(..), EditingStatus(..), File, FileData, FileEdited(..), FileID, FileValidationError(UnsupportedFile), Model, Msg(..))
 import Ports exposing (FilePortData, fileSelected, fileContentRead)
 import Set
 import Task
@@ -112,10 +102,33 @@ update msg model =
             , Cmd.none
             )
 
+        DeleteFile id ->
+            ( model, deleteFile id )
+
+        DeleteResponse (Err x) ->
+            Debug.log ("Delete failed " ++ toString x) ( { model | errors = toString x }, Cmd.none )
+
+        DeleteResponse (Ok _) ->
+            ( model, getFiles )
+
 
 getFiles : Cmd Msg
 getFiles =
     Http.send ListFiles <| Http.get "/files" (JD.list fileDataDecoder)
+
+
+deleteFile : FileID -> Cmd Msg
+deleteFile id =
+    Http.send DeleteResponse <|
+        Http.request
+            { method = "DELETE"
+            , headers = []
+            , url = "/files/" ++ toString id
+            , body = Http.emptyBody
+            , expect = Http.expectStringResponse (\_ -> Ok ())
+            , timeout = Just 5000
+            , withCredentials = False
+            }
 
 
 sendSaveRequest : FileData -> Cmd Msg

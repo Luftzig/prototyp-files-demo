@@ -21,6 +21,7 @@ import Styles exposing (Styles(..), Variations(Disabled), stylesheet)
 import Html exposing (Html, input)
 import Html.Attributes exposing (class, id, title, type_)
 import Html.Events exposing (on)
+import Icons
 import Json.Decode as JD
 import Time.Date
 import Time.DateTime
@@ -30,8 +31,8 @@ view : Model -> Html Msg
 view model =
     layout stylesheet <|
         column MainStyle
-            [ center, width (percent 100) ]
-            [ header MainStyle [ center ] <| text "Demo for Prototype"
+            [ center, width (percent 100), padding 5 ]
+            [ header Header [ width Attr.fill, center ] <| text "Demo for Prototype"
             , row Upload
                 [ center ]
                 [ Element.html <|
@@ -43,13 +44,12 @@ view model =
                         ]
                         []
                 ]
-            , table FileList
-                [ center ]
-              <|
-                transpose
-                    (tableHeader
-                        :: List.map fileRow model.files
-                    )
+            , column
+                FileList
+                [ center, width (percent 100), padding 20 ]
+                ([ row FileListHeader [ width Attr.fill, spread, padding 5 ] tableHeader ]
+                    ++ List.map (row FileItem [ width Attr.fill, spread, padding 5 ] << fileRow) model.files
+                )
             , editingModal model.fileEdited
             ]
 
@@ -68,10 +68,10 @@ internalEditingModal : FileData -> EditingStatus -> Element Styles Variations Ms
 internalEditingModal data status =
     modal Modal [ center, verticalCenter, width (px 375), padding 20 ] <|
         column FileEdit
-            [ center, spread ]
+            [ center, spread, padding 5 ]
             [ row Header
                 [ spread ]
-                [ h1 Header [] <| text "Edit File Data", button CloseButton [ Events.onClick CancelUpload ] <| text "x" ]
+                [ h1 Header [] <| text "Edit File Data", button CloseButton [ Events.onClick CancelUpload ] <| Icons.xSquare ]
             , hairline FileEdit
             , Input.text FileEditInput
                 []
@@ -96,7 +96,8 @@ internalEditingModal data status =
                 }
             , button SubmitButton
                 ([ Events.onClick <| SaveFile data
-                 , width (px 50)
+                 , width (px 120)
+                 , center
                  , vary Disabled (not <| fileCanBeSubmitted status || status == Sending)
                  ]
                     ++ if not <| fileCanBeSubmitted status || status == Sending then
@@ -140,19 +141,56 @@ toErrorMessage error =
 
 tableHeader : List (Element Styles Variations Msg)
 tableHeader =
-    [ empty
-    , text "File name"
-    , text "Description"
-    , text "Name"
-    , text "Date"
+    [ Element.el FileListHeader [ width <| Attr.fillPortion 1 ] <| empty
+    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "File name"
+    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "Description"
+    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "Name"
+    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "Date"
+    , Element.el FileListHeader [ width <| Attr.fillPortion 1 ] <| empty
     ]
 
 
 fileRow : FileData -> List (Element Styles Variations Msg)
 fileRow data =
-    [ text ""
-    , downloadAs { src = data.file.content, filename = data.file.filename } <| text data.file.filename
-    , text data.description
-    , text data.owner
-    , text <| Maybe.withDefault "" <| Maybe.map Time.DateTime.toISO8601 data.createdAt
+    [ Element.el MainStyle [ width <| Attr.fillPortion 1 ] <|
+        fileIcon data.file.filename
+    , Element.el MainStyle [ width <| Attr.fillPortion 3 ] <|
+        downloadAs { src = data.file.content, filename = data.file.filename } <|
+            text data.file.filename
+    , Element.el MainStyle [ width <| Attr.fillPortion 3 ] <|
+        text data.description
+    , Element.el MainStyle [ width <| Attr.fillPortion 3 ] <|
+        text data.owner
+    , Element.el MainStyle [ width <| Attr.fillPortion 3 ] <|
+        text <|
+            String.slice 0 10 <|
+                Maybe.withDefault
+                    ""
+                <|
+                    Maybe.map Time.DateTime.toISO8601 data.createdAt
+    , Element.el MainStyle [ width <| Attr.fillPortion 1 ] <|
+        whenJust data.id (\id -> button DeleteButton [ Events.onClick <| DeleteFile id ] Icons.trash)
     ]
+
+
+fileIcon : String -> Element Styles Variations Msg
+fileIcon name =
+    let
+        split =
+            String.split "." (String.toLower name) |> List.reverse
+    in
+        case split of
+            "jpg" :: _ ->
+                Icons.image
+
+            "jpeg" :: _ ->
+                Icons.image
+
+            "pdf" :: _ ->
+                Icons.book
+
+            "xml" :: _ ->
+                Icons.code
+
+            _ ->
+                empty

@@ -13,6 +13,7 @@
       if (node === null) return;
 
       var file = node.files[0];
+      if (file === undefined) return;
       var reader = new FileReader();
 
       reader.onload = (function (event) {
