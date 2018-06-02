@@ -1,17 +1,29 @@
 module View exposing (view)
 
 import Date
-import Element exposing (Element, button, column, downloadAs, empty, h1, hairline, header, image, layout, mainContent, modal, row, table, text, when, whenJust)
+import Element exposing (Element, button, column, downloadAs, empty, grid, h1, hairline, header, image, layout, mainContent, modal, row, table, text, when, whenJust)
 import Element.Attributes as Attr exposing (center, padding, percent, px, spread, vary, verticalCenter, width)
 import Element.Input as Input
 import Element.Events as Events
-import Model exposing (EditEvent(..), EditingStatus(EditingOk, ValidationError), File, FileData, FileEdited(Editing, NotEditing), FileValidationError(NoFile, UnsupportedFile), Model, Msg(..))
+import List.Extra exposing (transpose)
+import Model
+    exposing
+        ( EditEvent(..)
+        , EditingStatus(..)
+        , File
+        , FileData
+        , FileEdited(..)
+        , FileValidationError(..)
+        , Model
+        , Msg(..)
+        )
 import Styles exposing (Styles(..), Variations(Disabled), stylesheet)
 import Html exposing (Html, input)
 import Html.Attributes exposing (class, id, title, type_)
 import Html.Events exposing (on)
 import Json.Decode as JD
 import Time.Date
+import Time.DateTime
 
 
 view : Model -> Html Msg
@@ -33,9 +45,11 @@ view model =
                 ]
             , table FileList
                 [ center ]
-                (tableHeader
-                    :: List.map fileRow model.files
-                )
+              <|
+                transpose
+                    (tableHeader
+                        :: List.map fileRow model.files
+                    )
             , editingModal model.fileEdited
             ]
 
@@ -83,15 +97,18 @@ internalEditingModal data status =
             , button SubmitButton
                 ([ Events.onClick <| SaveFile data
                  , width (px 50)
-                 , vary Disabled (not <| fileCanBeSubmitted status)
+                 , vary Disabled (not <| fileCanBeSubmitted status || status == Sending)
                  ]
-                    ++ if not <| fileCanBeSubmitted status then
+                    ++ if not <| fileCanBeSubmitted status || status == Sending then
                         [ Attr.attribute "disabled" "false" ]
                        else
                         []
                 )
               <|
-                text "Upload"
+                if status == Sending then
+                    text "Sending..."
+                else
+                    text "Upload"
             , when (status /= EditingOk) <| row Error [] <| errors status
             ]
 
@@ -137,15 +154,5 @@ fileRow data =
     , downloadAs { src = data.file.content, filename = data.file.filename } <| text data.file.filename
     , text data.description
     , text data.owner
-    , text <| Maybe.withDefault "" <| Maybe.map Time.Date.toISO8601 data.createdAt
+    , text <| Maybe.withDefault "" <| Maybe.map Time.DateTime.toISO8601 data.createdAt
     ]
-
-
-viewImagePreview : File -> Element Styles Variations Msg
-viewImagePreview imageData =
-    image
-        FileItem
-        []
-        { src = imageData.content
-        , caption = imageData.filename
-        }

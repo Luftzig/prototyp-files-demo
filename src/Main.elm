@@ -7,10 +7,23 @@ import Html exposing (program)
 import Http
 import Json.Encode as JE
 import Json.Decode as JD
-import Model exposing (EditEvent(..), EditingStatus(EditingOk, ValidationError), File, FileData, FileEdited(Editing, NotEditing), FileValidationError(UnsupportedFile), Model, Msg(..))
+import Model
+    exposing
+        ( EditEvent(..)
+        , EditingStatus(..)
+        , File
+        , FileData
+        , FileEdited(..)
+        , FileValidationError(UnsupportedFile)
+        , Model
+        , Msg(..)
+        )
 import Ports exposing (FilePortData, fileSelected, fileContentRead)
 import Set
+import Task
+import Time
 import Time.Date
+import Time.DateTime as DateTime
 import View exposing (view)
 
 
@@ -29,8 +42,9 @@ init =
     ( { id = "ImageInputId"
       , files = []
       , fileEdited = NotEditing
+      , errors = ""
       }
-    , Cmd.none
+    , getFiles
     )
 
 
@@ -78,7 +92,7 @@ update msg model =
             )
 
         SaveResponse (Err x) ->
-            Debug.log ("Save failed " ++ toString x) ( model, Cmd.none )
+            Debug.log ("Save failed " ++ toString x) ( { model | fileEdited = NotEditing, errors = toString x }, Cmd.none )
 
         SaveResponse (Ok fileData) ->
             ( { model
@@ -88,10 +102,33 @@ update msg model =
             , Cmd.none
             )
 
+        ListFiles (Err x) ->
+            Debug.log ("List failed " ++ toString x) ( { model | errors = toString x }, Cmd.none )
+
+        ListFiles (Ok files) ->
+            ( { model
+                | files = files
+              }
+            , Cmd.none
+            )
+
+
+getFiles : Cmd Msg
+getFiles =
+    Http.send ListFiles <| Http.get "/files" (JD.list fileDataDecoder)
+
 
 sendSaveRequest : FileData -> Cmd Msg
 sendSaveRequest data =
-    Http.send SaveResponse <| Http.post "/files" (Http.jsonBody <| encodeFileData data) fileDataDecoder
+    Task.attempt SaveResponse (compileSaveRequest data)
+
+
+compileSaveRequest : FileData -> Task.Task Http.Error FileData
+compileSaveRequest data =
+    Time.now
+        |> Task.andThen (\time -> Task.succeed <| { data | createdAt = Just (DateTime.fromTimestamp time) })
+        |> Task.andThen (\data -> Task.succeed <| Http.jsonBody <| encodeFileData data)
+        |> Task.andThen (\encodedData -> Http.toTask <| Http.post "/files" encodedData fileDataDecoder)
 
 
 encodeFileData : FileData -> JE.Value
@@ -101,6 +138,7 @@ encodeFileData data =
         , ( "owner", JE.string data.owner )
         , ( "content", JE.string data.file.content )
         , ( "description", JE.string data.description )
+        , ( "createdAt", Maybe.withDefault (JE.null) (Maybe.map (DateTime.toISO8601 >> JE.string) data.createdAt) )
         ]
 
 
@@ -118,8 +156,8 @@ fileDataDecoder =
             fileDecoder
             (JD.field "owner" JD.string)
             (JD.field "description" JD.string)
-            (JD.field "createdAt" (JD.string |> JD.map Time.Date.fromISO8601 |> JD.map Result.toMaybe))
-            (JD.field "_id" (JD.string |> JD.map Just))
+            (JD.field "createdAt" (JD.string |> JD.map DateTime.fromISO8601 |> JD.map Result.toMaybe))
+            (JD.field "id" (JD.int |> JD.map Just))
 
 
 editUpload : EditEvent -> FileEdited -> FileEdited
