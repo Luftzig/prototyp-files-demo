@@ -17,12 +17,26 @@ type Msg
     | ListFiles (Result Http.Error (List FileData))
     | DeleteFile FileID
     | DeleteResponse (Result Http.Error ())
+    | SortBy Field SortDirection
 
 
 type EditEvent
     = ChangeOwner String
     | ChangeDescription String
     | ChangeFileName String
+
+
+type Field
+    = Owner
+    | Description
+    | CreatedAt
+    | Filename
+
+
+type SortDirection
+    = Asc
+    | Desc
+    | None
 
 
 type alias File =
@@ -60,9 +74,18 @@ type FileValidationError
     | UnsupportedFile
 
 
+type alias Sorts =
+    { owner : SortDirection
+    , description : SortDirection
+    , createdAt : SortDirection
+    , filename : SortDirection
+    }
+
+
 type alias Model =
     { id : String
     , files : List FileData
     , fileEdited : FileEdited
     , errors : String
+    , sorts : Sorts
     }

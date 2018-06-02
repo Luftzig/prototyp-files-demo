@@ -6,18 +6,8 @@ import Element.Attributes as Attr exposing (center, padding, percent, px, spread
 import Element.Input as Input
 import Element.Events as Events
 import List.Extra exposing (transpose)
-import Model
-    exposing
-        ( EditEvent(..)
-        , EditingStatus(..)
-        , File
-        , FileData
-        , FileEdited(..)
-        , FileValidationError(..)
-        , Model
-        , Msg(..)
-        )
-import Styles exposing (Styles(..), Variations(Disabled), stylesheet)
+import Model exposing (EditEvent(..), EditingStatus(..), Field(..), File, FileData, FileEdited(..), FileValidationError(..), Model, Msg(..), SortDirection(..), Sorts)
+import Styles exposing (Styles(..), Variations(Disabled, MiddleBorder), stylesheet)
 import Html exposing (Html, input)
 import Html.Attributes exposing (class, id, title, type_)
 import Html.Events exposing (on)
@@ -47,7 +37,7 @@ view model =
             , column
                 FileList
                 [ center, width (percent 100), padding 20 ]
-                ([ row FileListHeader [ width Attr.fill, spread, padding 5 ] tableHeader ]
+                ([ row FileListHeader [ width Attr.fill, spread, padding 5 ] <| tableHeader model.sorts ]
                     ++ List.map (row FileItem [ width Attr.fill, spread, padding 5 ] << fileRow) model.files
                 )
             , editingModal model.fileEdited
@@ -139,15 +129,40 @@ toErrorMessage error =
             "File type not supported. Only PDF, XML, and JPG are supported"
 
 
-tableHeader : List (Element Styles Variations Msg)
-tableHeader =
+tableHeader : Sorts -> List (Element Styles Variations Msg)
+tableHeader sorts =
     [ Element.el FileListHeader [ width <| Attr.fillPortion 1 ] <| empty
-    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "File name"
-    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "Description"
-    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "Name"
-    , Element.el FileListHeader [ width <| Attr.fillPortion 3 ] <| text "Date"
+    , row FileListHeader
+        [ width <| Attr.fillPortion 3, spread, padding 5 ]
+        [ text "File name", sortIcon Filename sorts.filename ]
+    , row FileListHeader
+        [ width <| Attr.fillPortion 3, spread, padding 5, vary MiddleBorder True ]
+        [ text "Description", sortIcon Description sorts.description ]
+    , row FileListHeader
+        [ width <| Attr.fillPortion 3, spread, padding 5, vary MiddleBorder True ]
+        [ text "Name", sortIcon Owner sorts.owner ]
+    , row FileListHeader
+        [ width <| Attr.fillPortion 3, spread, padding 5, vary MiddleBorder True ]
+        [ text "Date", sortIcon CreatedAt sorts.createdAt ]
     , Element.el FileListHeader [ width <| Attr.fillPortion 1 ] <| empty
     ]
+
+
+sortIcon : Field -> SortDirection -> Element Styles Variations Msg
+sortIcon field dir =
+    let
+        sortButton field nextDir icons =
+            button Icon [ Events.onClick <| SortBy field nextDir ] <| row Icon [ padding -2 ] icons
+    in
+        case dir of
+            Asc ->
+                sortButton field Desc [ Icons.filter, Icons.chevronUp ]
+
+            Desc ->
+                sortButton field None [ Icons.filter, Icons.chevronDown ]
+
+            None ->
+                sortButton field Asc [ Icons.filter ]
 
 
 fileRow : FileData -> List (Element Styles Variations Msg)

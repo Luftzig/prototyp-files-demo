@@ -26,6 +26,7 @@ type Styles
 
 type Variations
     = Disabled
+    | MiddleBorder
 
 
 stylesheet =
@@ -39,6 +40,9 @@ stylesheet =
         , style FileListHeader
             [ Style.Font.bold
             , Style.Border.bottom 2
+            , variation MiddleBorder
+                [ Style.Border.left 1
+                ]
             ]
         , style FileItem [ Style.Border.all 1 ]
         , style Modal

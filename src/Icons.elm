@@ -1,7 +1,10 @@
 module Icons
     exposing
         ( book
+        , chevronDown
+        , chevronUp
         , code
+        , filter
         , image
         , trash
         , xSquare
@@ -38,11 +41,32 @@ book =
         ]
 
 
+chevronDown : Element Styles variations msg
+chevronDown =
+    svgFeatherIcon "chevron-down"
+        [ Svg.polyline [ points "6 9 12 15 18 9" ] []
+        ]
+
+
+chevronUp : Element Styles variations msg
+chevronUp =
+    svgFeatherIcon "chevron-up"
+        [ Svg.polyline [ points "18 15 12 9 6 15" ] []
+        ]
+
+
 code : Element Styles variations msg
 code =
     svgFeatherIcon "code"
         [ Svg.polyline [ points "16 18 22 12 16 6" ] []
         , Svg.polyline [ points "8 6 2 12 8 18" ] []
+        ]
+
+
+filter : Element Styles variations msg
+filter =
+    svgFeatherIcon "filter"
+        [ Svg.polygon [ points "22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" ] []
         ]
 
 

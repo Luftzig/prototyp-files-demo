@@ -7,13 +7,14 @@ import Html exposing (program)
 import Http
 import Json.Encode as JE
 import Json.Decode as JD
-import Model exposing (EditEvent(..), EditingStatus(..), File, FileData, FileEdited(..), FileID, FileValidationError(UnsupportedFile), Model, Msg(..))
+import Model exposing (EditEvent(..), EditingStatus(..), Field(..), File, FileData, FileEdited(..), FileID, FileValidationError(UnsupportedFile), Model, Msg(..), SortDirection(..), Sorts)
 import Ports exposing (FilePortData, fileSelected, fileContentRead)
 import Set
 import Task
 import Time
 import Time.Date
 import Time.DateTime as DateTime
+import Tuple exposing (first, second)
 import View exposing (view)
 
 
@@ -33,9 +34,18 @@ init =
       , files = []
       , fileEdited = NotEditing
       , errors = ""
+      , sorts = emptySorts
       }
-    , getFiles
+    , getFiles emptySorts
     )
+
+
+emptySorts =
+    { description = None
+    , filename = None
+    , owner = None
+    , createdAt = None
+    }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -109,12 +119,66 @@ update msg model =
             Debug.log ("Delete failed " ++ toString x) ( { model | errors = toString x }, Cmd.none )
 
         DeleteResponse (Ok _) ->
-            ( model, getFiles )
+            ( model, getFiles model.sorts )
+
+        SortBy field dir ->
+            let
+                newSorts =
+                    updateSort field dir model.sorts
+            in
+                ( { model | sorts = newSorts }, getFiles newSorts )
 
 
-getFiles : Cmd Msg
-getFiles =
-    Http.send ListFiles <| Http.get "/files" (JD.list fileDataDecoder)
+getFiles : Sorts -> Cmd Msg
+getFiles sorting =
+    let
+        uri =
+            "/files"
+                ++ if List.isEmpty sortOptions then
+                    ""
+                   else
+                    ("?_sort="
+                        ++ (String.join "," <| List.map first sortOptions)
+                        ++ "&_order="
+                        ++ (String.join "," <| List.map second sortOptions)
+                    )
+
+        sortOptions =
+            List.filter (second >> String.isEmpty >> not)
+                [ ( "createdAt", dirString sorting.createdAt )
+                , ( "description", dirString sorting.description )
+                , ( "filename", dirString sorting.filename )
+                , ( "owner", dirString sorting.owner )
+                ]
+
+        dirString dir =
+            case dir of
+                Asc ->
+                    "asc"
+
+                Desc ->
+                    "desc"
+
+                None ->
+                    ""
+    in
+        Http.send ListFiles <| Http.get uri (JD.list fileDataDecoder)
+
+
+updateSort : Field -> SortDirection -> Sorts -> Sorts
+updateSort field dir old =
+    case field of
+        CreatedAt ->
+            { old | createdAt = dir }
+
+        Description ->
+            { old | description = dir }
+
+        Filename ->
+            { old | filename = dir }
+
+        Owner ->
+            { old | owner = dir }
 
 
 deleteFile : FileID -> Cmd Msg
