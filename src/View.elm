@@ -5,7 +5,7 @@ import Element exposing (Element, button, column, downloadAs, empty, h1, hairlin
 import Element.Attributes as Attr exposing (center, padding, percent, px, spread, vary, verticalCenter, width)
 import Element.Input as Input
 import Element.Events as Events
-import Model exposing (EditEvent(..), EditingStatus(EditingOk), File, FileData, FileEdited(Editing, NotEditing), Model, Msg(..))
+import Model exposing (EditEvent(..), EditingStatus(EditingOk, ValidationError), File, FileData, FileEdited(Editing, NotEditing), FileValidationError(NoFile, UnsupportedFile), Model, Msg(..))
 import Styles exposing (Styles(..), Variations(Disabled), stylesheet)
 import Html exposing (Html, input)
 import Html.Attributes exposing (class, id, title, type_)
@@ -81,23 +81,44 @@ internalEditingModal data status =
                 , options = []
                 }
             , button SubmitButton
-                [ Events.onClick <| SaveFile data
-                , width (px 50)
-                , vary Disabled (fileCanBeSubmitted status)
-                , Attr.attribute "disabled" <|
-                    if fileCanBeSubmitted status then
-                        "false"
-                    else
-                        "true"
-                ]
+                ([ Events.onClick <| SaveFile data
+                 , width (px 50)
+                 , vary Disabled (not <| fileCanBeSubmitted status)
+                 ]
+                    ++ if not <| fileCanBeSubmitted status then
+                        [ Attr.attribute "disabled" "false" ]
+                       else
+                        []
+                )
               <|
                 text "Upload"
+            , when (status /= EditingOk) <| row Error [] <| errors status
             ]
 
 
 fileCanBeSubmitted : EditingStatus -> Bool
 fileCanBeSubmitted status =
     status == EditingOk
+
+
+errors : EditingStatus -> List (Element Styles Variations Msg)
+errors status =
+    case status of
+        ValidationError errors ->
+            List.map (\err -> text <| toErrorMessage err) errors
+
+        _ ->
+            []
+
+
+toErrorMessage : FileValidationError -> String
+toErrorMessage error =
+    case error of
+        NoFile ->
+            "No file was selected"
+
+        UnsupportedFile ->
+            "File type not supported. Only PDF, XML, and JPG are supported"
 
 
 tableHeader : List (Element Styles Variations Msg)

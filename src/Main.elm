@@ -7,7 +7,7 @@ import Html exposing (program)
 import Http
 import Json.Encode as JE
 import Json.Decode as JD
-import Model exposing (EditEvent(..), EditingStatus(EditingOk, Pristine, ValidationError), File, FileData, FileEdited(Editing, NotEditing), FileValidationError(UnsupportedFile), Model, Msg(..))
+import Model exposing (EditEvent(..), EditingStatus(EditingOk, ValidationError), File, FileData, FileEdited(Editing, NotEditing), FileValidationError(UnsupportedFile), Model, Msg(..))
 import Ports exposing (FilePortData, fileSelected, fileContentRead)
 import Set
 import Time.Date
@@ -48,10 +48,16 @@ update msg model =
                     { content = data.content
                     , filename = data.filename
                     }
+
+                status =
+                    if validFileName data.filename then
+                        EditingOk
+                    else
+                        ValidationError [ UnsupportedFile ]
             in
                 ( { model
                     | fileEdited =
-                        Editing { file = newFile, owner = "", description = "", createdAt = Nothing, id = Nothing } Pristine
+                        Editing { file = newFile, owner = "", description = "", createdAt = Nothing, id = Nothing } status
                   }
                 , Cmd.none
                 )
@@ -130,10 +136,10 @@ updateEditingField : EditEvent -> ( FileData, EditingStatus ) -> ( FileData, Edi
 updateEditingField change ( data, status ) =
     case change of
         ChangeOwner newOwner ->
-            ( { data | owner = newOwner }, updateStatus Nothing status )
+            ( { data | owner = newOwner }, status )
 
         ChangeDescription newDesc ->
-            ( { data | description = newDesc }, updateStatus Nothing status )
+            ( { data | description = newDesc }, status )
 
         ChangeFileName newName ->
             let
@@ -143,39 +149,51 @@ updateEditingField change ( data, status ) =
                 newFile =
                     { file | filename = newName }
 
-                error =
-                    if validFileName newName then
-                        Nothing
+                newStatus =
+                    if validFileName newFile.filename then
+                        clearError UnsupportedFile status
                     else
-                        Just UnsupportedFile
+                        addError UnsupportedFile status
             in
-                ( { data | file = newFile }, updateStatus error status )
+                ( { data | file = newFile }, newStatus )
 
 
-updateStatus : Maybe FileValidationError -> EditingStatus -> EditingStatus
-updateStatus error oldStatus =
-    case error of
-        Nothing ->
-            if oldStatus /= Pristine then
-                oldStatus
+addError : FileValidationError -> EditingStatus -> EditingStatus
+addError error oldStatus =
+    let
+        existingErrors =
+            case oldStatus of
+                ValidationError errors ->
+                    errors
+
+                _ ->
+                    []
+    in
+        ValidationError <|
+            if List.member error existingErrors then
+                existingErrors
             else
-                EditingOk
+                error :: existingErrors
 
-        Just error ->
-            let
-                existingErrors =
-                    case oldStatus of
-                        ValidationError errors ->
-                            errors
 
-                        _ ->
-                            []
-            in
-                ValidationError <|
-                    if List.member error existingErrors then
-                        existingErrors
-                    else
-                        error :: existingErrors
+clearError : FileValidationError -> EditingStatus -> EditingStatus
+clearError error oldStatus =
+    let
+        existingErrors =
+            case oldStatus of
+                ValidationError errors ->
+                    errors
+
+                _ ->
+                    []
+
+        newErrors =
+            List.filter ((/=) error) existingErrors
+    in
+        if List.isEmpty newErrors then
+            EditingOk
+        else
+            ValidationError newErrors
 
 
 validFileName : String -> Bool

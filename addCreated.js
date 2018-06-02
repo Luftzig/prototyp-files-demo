@@ -1,4 +1,5 @@
 module.exports = (req, res, next) => {
+  console.log('Middleware')
   try {
     if (req.method === 'POST') {
       req.body.createdAt = Date.now()

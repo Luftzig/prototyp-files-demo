@@ -68,3 +68,4 @@ typings/
 .next
 
 dist/
+db.json

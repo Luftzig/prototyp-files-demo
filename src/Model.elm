@@ -46,8 +46,7 @@ type FileEdited
 
 
 type EditingStatus
-    = Pristine
-    | EditingOk
+    = EditingOk
     | ValidationError (List FileValidationError)
 
 

@@ -4,11 +4,13 @@ import Style exposing (style, variation)
 import Color
 import Style.Border
 import Style.Color
+import Style.Font
 
 
 type Styles
     = Upload
     | MainStyle
+    | Error
     | FileList
     | FileListHeader
     | FileItem
@@ -38,5 +40,9 @@ stylesheet =
         , style SubmitButton
             [ variation Disabled
                 []
+            ]
+        , style Error
+            [ Style.Color.text Color.red
+            , Style.Font.size 10
             ]
         ]
