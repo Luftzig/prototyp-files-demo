@@ -1,12 +1,12 @@
 module View exposing (view)
 
 import Date
-import Element exposing (Element, button, column, downloadAs, empty, h1, hairline, header, image, layout, mainContent, modal, row, table, text, whenJust)
-import Element.Attributes as Attr exposing (center, padding, percent, px, spread, verticalCenter, width)
+import Element exposing (Element, button, column, downloadAs, empty, h1, hairline, header, image, layout, mainContent, modal, row, table, text, when, whenJust)
+import Element.Attributes as Attr exposing (center, padding, percent, px, spread, vary, verticalCenter, width)
 import Element.Input as Input
 import Element.Events as Events
-import Model exposing (EditEvent(..), File, FileData, Model, Msg(..))
-import Styles exposing (Styles(..), stylesheet)
+import Model exposing (EditEvent(..), EditingStatus(EditingOk), File, FileData, FileEdited(Editing, NotEditing), Model, Msg(..))
+import Styles exposing (Styles(..), Variations(Disabled), stylesheet)
 import Html exposing (Html, input)
 import Html.Attributes exposing (class, id, title, type_)
 import Html.Events exposing (on)
@@ -36,13 +36,23 @@ view model =
                 (tableHeader
                     :: List.map fileRow model.files
                 )
-            , whenJust model.fileEdited editModal
+            , editingModal model.fileEdited
             ]
 
 
-editModal : FileData -> Element Styles variation Msg
-editModal data =
-    modal Modal [ center, verticalCenter, width (px 275), padding 10 ] <|
+editingModal : FileEdited -> Element Styles Variations Msg
+editingModal fileEdited =
+    case fileEdited of
+        NotEditing ->
+            empty
+
+        Editing data status ->
+            internalEditingModal data status
+
+
+internalEditingModal : FileData -> EditingStatus -> Element Styles Variations Msg
+internalEditingModal data status =
+    modal Modal [ center, verticalCenter, width (px 375), padding 20 ] <|
         column FileEdit
             [ center, spread ]
             [ row Header
@@ -70,11 +80,27 @@ editModal data =
                 , label = Input.labelLeft <| text "Description"
                 , options = []
                 }
-            , button SubmitButton [ Events.onClick <| SaveFile data, width (px 50) ] <| text "Upload"
+            , button SubmitButton
+                [ Events.onClick <| SaveFile data
+                , width (px 50)
+                , vary Disabled (fileCanBeSubmitted status)
+                , Attr.attribute "disabled" <|
+                    if fileCanBeSubmitted status then
+                        "false"
+                    else
+                        "true"
+                ]
+              <|
+                text "Upload"
             ]
 
 
-tableHeader : List (Element Styles variation Msg)
+fileCanBeSubmitted : EditingStatus -> Bool
+fileCanBeSubmitted status =
+    status == EditingOk
+
+
+tableHeader : List (Element Styles Variations Msg)
 tableHeader =
     [ empty
     , text "File name"
@@ -84,7 +110,7 @@ tableHeader =
     ]
 
 
-fileRow : FileData -> List (Element Styles variation Msg)
+fileRow : FileData -> List (Element Styles Variations Msg)
 fileRow data =
     [ text ""
     , downloadAs { src = data.file.content, filename = data.file.filename } <| text data.file.filename
@@ -94,7 +120,7 @@ fileRow data =
     ]
 
 
-viewImagePreview : File -> Element Styles variation Msg
+viewImagePreview : File -> Element Styles Variations Msg
 viewImagePreview imageData =
     image
         FileItem

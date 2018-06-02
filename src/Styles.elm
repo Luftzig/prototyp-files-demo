@@ -1,6 +1,6 @@
 module Styles exposing (..)
 
-import Style exposing (style)
+import Style exposing (style, variation)
 import Color
 import Style.Border
 import Style.Color
@@ -20,6 +20,10 @@ type Styles
     | CloseButton
 
 
+type Variations
+    = Disabled
+
+
 stylesheet =
     Style.styleSheet
         [ style Upload []
@@ -31,4 +35,8 @@ stylesheet =
             , Style.Border.rounded 20
             ]
         , style MainStyle []
+        , style SubmitButton
+            [ variation Disabled
+                []
+            ]
         ]

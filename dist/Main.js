@@ -11167,6 +11167,367 @@ var _elm_lang$html$Html_Keyed$node = _elm_lang$virtual_dom$VirtualDom$keyedNode;
 var _elm_lang$html$Html_Keyed$ol = _elm_lang$html$Html_Keyed$node('ol');
 var _elm_lang$html$Html_Keyed$ul = _elm_lang$html$Html_Keyed$node('ul');
 
+var _elm_lang$http$Native_Http = function() {
+
+
+// ENCODING AND DECODING
+
+function encodeUri(string)
+{
+	return encodeURIComponent(string);
+}
+
+function decodeUri(string)
+{
+	try
+	{
+		return _elm_lang$core$Maybe$Just(decodeURIComponent(string));
+	}
+	catch(e)
+	{
+		return _elm_lang$core$Maybe$Nothing;
+	}
+}
+
+
+// SEND REQUEST
+
+function toTask(request, maybeProgress)
+{
+	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback)
+	{
+		var xhr = new XMLHttpRequest();
+
+		configureProgress(xhr, maybeProgress);
+
+		xhr.addEventListener('error', function() {
+			callback(_elm_lang$core$Native_Scheduler.fail({ ctor: 'NetworkError' }));
+		});
+		xhr.addEventListener('timeout', function() {
+			callback(_elm_lang$core$Native_Scheduler.fail({ ctor: 'Timeout' }));
+		});
+		xhr.addEventListener('load', function() {
+			callback(handleResponse(xhr, request.expect.responseToResult));
+		});
+
+		try
+		{
+			xhr.open(request.method, request.url, true);
+		}
+		catch (e)
+		{
+			return callback(_elm_lang$core$Native_Scheduler.fail({ ctor: 'BadUrl', _0: request.url }));
+		}
+
+		configureRequest(xhr, request);
+		send(xhr, request.body);
+
+		return function() { xhr.abort(); };
+	});
+}
+
+function configureProgress(xhr, maybeProgress)
+{
+	if (maybeProgress.ctor === 'Nothing')
+	{
+		return;
+	}
+
+	xhr.addEventListener('progress', function(event) {
+		if (!event.lengthComputable)
+		{
+			return;
+		}
+		_elm_lang$core$Native_Scheduler.rawSpawn(maybeProgress._0({
+			bytes: event.loaded,
+			bytesExpected: event.total
+		}));
+	});
+}
+
+function configureRequest(xhr, request)
+{
+	function setHeader(pair)
+	{
+		xhr.setRequestHeader(pair._0, pair._1);
+	}
+
+	A2(_elm_lang$core$List$map, setHeader, request.headers);
+	xhr.responseType = request.expect.responseType;
+	xhr.withCredentials = request.withCredentials;
+
+	if (request.timeout.ctor === 'Just')
+	{
+		xhr.timeout = request.timeout._0;
+	}
+}
+
+function send(xhr, body)
+{
+	switch (body.ctor)
+	{
+		case 'EmptyBody':
+			xhr.send();
+			return;
+
+		case 'StringBody':
+			xhr.setRequestHeader('Content-Type', body._0);
+			xhr.send(body._1);
+			return;
+
+		case 'FormDataBody':
+			xhr.send(body._0);
+			return;
+	}
+}
+
+
+// RESPONSES
+
+function handleResponse(xhr, responseToResult)
+{
+	var response = toResponse(xhr);
+
+	if (xhr.status < 200 || 300 <= xhr.status)
+	{
+		response.body = xhr.responseText;
+		return _elm_lang$core$Native_Scheduler.fail({
+			ctor: 'BadStatus',
+			_0: response
+		});
+	}
+
+	var result = responseToResult(response);
+
+	if (result.ctor === 'Ok')
+	{
+		return _elm_lang$core$Native_Scheduler.succeed(result._0);
+	}
+	else
+	{
+		response.body = xhr.responseText;
+		return _elm_lang$core$Native_Scheduler.fail({
+			ctor: 'BadPayload',
+			_0: result._0,
+			_1: response
+		});
+	}
+}
+
+function toResponse(xhr)
+{
+	return {
+		status: { code: xhr.status, message: xhr.statusText },
+		headers: parseHeaders(xhr.getAllResponseHeaders()),
+		url: xhr.responseURL,
+		body: xhr.response
+	};
+}
+
+function parseHeaders(rawHeaders)
+{
+	var headers = _elm_lang$core$Dict$empty;
+
+	if (!rawHeaders)
+	{
+		return headers;
+	}
+
+	var headerPairs = rawHeaders.split('\u000d\u000a');
+	for (var i = headerPairs.length; i--; )
+	{
+		var headerPair = headerPairs[i];
+		var index = headerPair.indexOf('\u003a\u0020');
+		if (index > 0)
+		{
+			var key = headerPair.substring(0, index);
+			var value = headerPair.substring(index + 2);
+
+			headers = A3(_elm_lang$core$Dict$update, key, function(oldValue) {
+				if (oldValue.ctor === 'Just')
+				{
+					return _elm_lang$core$Maybe$Just(value + ', ' + oldValue._0);
+				}
+				return _elm_lang$core$Maybe$Just(value);
+			}, headers);
+		}
+	}
+
+	return headers;
+}
+
+
+// EXPECTORS
+
+function expectStringResponse(responseToResult)
+{
+	return {
+		responseType: 'text',
+		responseToResult: responseToResult
+	};
+}
+
+function mapExpect(func, expect)
+{
+	return {
+		responseType: expect.responseType,
+		responseToResult: function(response) {
+			var convertedResponse = expect.responseToResult(response);
+			return A2(_elm_lang$core$Result$map, func, convertedResponse);
+		}
+	};
+}
+
+
+// BODY
+
+function multipart(parts)
+{
+	var formData = new FormData();
+
+	while (parts.ctor !== '[]')
+	{
+		var part = parts._0;
+		formData.append(part._0, part._1);
+		parts = parts._1;
+	}
+
+	return { ctor: 'FormDataBody', _0: formData };
+}
+
+return {
+	toTask: F2(toTask),
+	expectStringResponse: expectStringResponse,
+	mapExpect: F2(mapExpect),
+	multipart: multipart,
+	encodeUri: encodeUri,
+	decodeUri: decodeUri
+};
+
+}();
+
+var _elm_lang$http$Http_Internal$map = F2(
+	function (func, request) {
+		return _elm_lang$core$Native_Utils.update(
+			request,
+			{
+				expect: A2(_elm_lang$http$Native_Http.mapExpect, func, request.expect)
+			});
+	});
+var _elm_lang$http$Http_Internal$RawRequest = F7(
+	function (a, b, c, d, e, f, g) {
+		return {method: a, headers: b, url: c, body: d, expect: e, timeout: f, withCredentials: g};
+	});
+var _elm_lang$http$Http_Internal$Request = function (a) {
+	return {ctor: 'Request', _0: a};
+};
+var _elm_lang$http$Http_Internal$Expect = {ctor: 'Expect'};
+var _elm_lang$http$Http_Internal$FormDataBody = {ctor: 'FormDataBody'};
+var _elm_lang$http$Http_Internal$StringBody = F2(
+	function (a, b) {
+		return {ctor: 'StringBody', _0: a, _1: b};
+	});
+var _elm_lang$http$Http_Internal$EmptyBody = {ctor: 'EmptyBody'};
+var _elm_lang$http$Http_Internal$Header = F2(
+	function (a, b) {
+		return {ctor: 'Header', _0: a, _1: b};
+	});
+
+var _elm_lang$http$Http$decodeUri = _elm_lang$http$Native_Http.decodeUri;
+var _elm_lang$http$Http$encodeUri = _elm_lang$http$Native_Http.encodeUri;
+var _elm_lang$http$Http$expectStringResponse = _elm_lang$http$Native_Http.expectStringResponse;
+var _elm_lang$http$Http$expectJson = function (decoder) {
+	return _elm_lang$http$Http$expectStringResponse(
+		function (response) {
+			return A2(_elm_lang$core$Json_Decode$decodeString, decoder, response.body);
+		});
+};
+var _elm_lang$http$Http$expectString = _elm_lang$http$Http$expectStringResponse(
+	function (response) {
+		return _elm_lang$core$Result$Ok(response.body);
+	});
+var _elm_lang$http$Http$multipartBody = _elm_lang$http$Native_Http.multipart;
+var _elm_lang$http$Http$stringBody = _elm_lang$http$Http_Internal$StringBody;
+var _elm_lang$http$Http$jsonBody = function (value) {
+	return A2(
+		_elm_lang$http$Http_Internal$StringBody,
+		'application/json',
+		A2(_elm_lang$core$Json_Encode$encode, 0, value));
+};
+var _elm_lang$http$Http$emptyBody = _elm_lang$http$Http_Internal$EmptyBody;
+var _elm_lang$http$Http$header = _elm_lang$http$Http_Internal$Header;
+var _elm_lang$http$Http$request = _elm_lang$http$Http_Internal$Request;
+var _elm_lang$http$Http$post = F3(
+	function (url, body, decoder) {
+		return _elm_lang$http$Http$request(
+			{
+				method: 'POST',
+				headers: {ctor: '[]'},
+				url: url,
+				body: body,
+				expect: _elm_lang$http$Http$expectJson(decoder),
+				timeout: _elm_lang$core$Maybe$Nothing,
+				withCredentials: false
+			});
+	});
+var _elm_lang$http$Http$get = F2(
+	function (url, decoder) {
+		return _elm_lang$http$Http$request(
+			{
+				method: 'GET',
+				headers: {ctor: '[]'},
+				url: url,
+				body: _elm_lang$http$Http$emptyBody,
+				expect: _elm_lang$http$Http$expectJson(decoder),
+				timeout: _elm_lang$core$Maybe$Nothing,
+				withCredentials: false
+			});
+	});
+var _elm_lang$http$Http$getString = function (url) {
+	return _elm_lang$http$Http$request(
+		{
+			method: 'GET',
+			headers: {ctor: '[]'},
+			url: url,
+			body: _elm_lang$http$Http$emptyBody,
+			expect: _elm_lang$http$Http$expectString,
+			timeout: _elm_lang$core$Maybe$Nothing,
+			withCredentials: false
+		});
+};
+var _elm_lang$http$Http$toTask = function (_p0) {
+	var _p1 = _p0;
+	return A2(_elm_lang$http$Native_Http.toTask, _p1._0, _elm_lang$core$Maybe$Nothing);
+};
+var _elm_lang$http$Http$send = F2(
+	function (resultToMessage, request) {
+		return A2(
+			_elm_lang$core$Task$attempt,
+			resultToMessage,
+			_elm_lang$http$Http$toTask(request));
+	});
+var _elm_lang$http$Http$Response = F4(
+	function (a, b, c, d) {
+		return {url: a, status: b, headers: c, body: d};
+	});
+var _elm_lang$http$Http$BadPayload = F2(
+	function (a, b) {
+		return {ctor: 'BadPayload', _0: a, _1: b};
+	});
+var _elm_lang$http$Http$BadStatus = function (a) {
+	return {ctor: 'BadStatus', _0: a};
+};
+var _elm_lang$http$Http$NetworkError = {ctor: 'NetworkError'};
+var _elm_lang$http$Http$Timeout = {ctor: 'Timeout'};
+var _elm_lang$http$Http$BadUrl = function (a) {
+	return {ctor: 'BadUrl', _0: a};
+};
+var _elm_lang$http$Http$StringPart = F2(
+	function (a, b) {
+		return {ctor: 'StringPart', _0: a, _1: b};
+	});
+var _elm_lang$http$Http$stringPart = _elm_lang$http$Http$StringPart;
+
 var _elm_lang$window$Native_Window = function()
 {
 
@@ -24682,6 +25043,9 @@ var _user$project$Model$Model = F3(
 	function (a, b, c) {
 		return {id: a, files: b, fileEdited: c};
 	});
+var _user$project$Model$SaveResponse = function (a) {
+	return {ctor: 'SaveResponse', _0: a};
+};
 var _user$project$Model$EditUpload = function (a) {
 	return {ctor: 'EditUpload', _0: a};
 };
@@ -24702,6 +25066,18 @@ var _user$project$Model$ChangeDescription = function (a) {
 var _user$project$Model$ChangeOwner = function (a) {
 	return {ctor: 'ChangeOwner', _0: a};
 };
+var _user$project$Model$Editing = F2(
+	function (a, b) {
+		return {ctor: 'Editing', _0: a, _1: b};
+	});
+var _user$project$Model$NotEditing = {ctor: 'NotEditing'};
+var _user$project$Model$ValidationError = function (a) {
+	return {ctor: 'ValidationError', _0: a};
+};
+var _user$project$Model$EditingOk = {ctor: 'EditingOk'};
+var _user$project$Model$Pristine = {ctor: 'Pristine'};
+var _user$project$Model$UnsupportedFile = {ctor: 'UnsupportedFile'};
+var _user$project$Model$NoFile = {ctor: 'NoFile'};
 
 var _user$project$Styles$CloseButton = {ctor: 'CloseButton'};
 var _user$project$Styles$SubmitButton = {ctor: 'SubmitButton'};
@@ -24714,6 +25090,7 @@ var _user$project$Styles$FileListHeader = {ctor: 'FileListHeader'};
 var _user$project$Styles$FileList = {ctor: 'FileList'};
 var _user$project$Styles$MainStyle = {ctor: 'MainStyle'};
 var _user$project$Styles$Upload = {ctor: 'Upload'};
+var _user$project$Styles$Disabled = {ctor: 'Disabled'};
 var _user$project$Styles$stylesheet = _mdgriffith$style_elements$Style$styleSheet(
 	{
 		ctor: '::',
@@ -24759,7 +25136,21 @@ var _user$project$Styles$stylesheet = _mdgriffith$style_elements$Style$styleShee
 								_mdgriffith$style_elements$Style$style,
 								_user$project$Styles$MainStyle,
 								{ctor: '[]'}),
-							_1: {ctor: '[]'}
+							_1: {
+								ctor: '::',
+								_0: A2(
+									_mdgriffith$style_elements$Style$style,
+									_user$project$Styles$SubmitButton,
+									{
+										ctor: '::',
+										_0: A2(
+											_mdgriffith$style_elements$Style$variation,
+											_user$project$Styles$Disabled,
+											{ctor: '[]'}),
+										_1: {ctor: '[]'}
+									}),
+								_1: {ctor: '[]'}
+							}
 						}
 					}
 				}
@@ -24825,90 +25216,78 @@ var _user$project$View$tableHeader = {
 		}
 	}
 };
-var _user$project$View$editModal = function (data) {
-	return A3(
-		_mdgriffith$style_elements$Element$modal,
-		_user$project$Styles$Modal,
-		{
-			ctor: '::',
-			_0: _mdgriffith$style_elements$Element_Attributes$center,
-			_1: {
-				ctor: '::',
-				_0: _mdgriffith$style_elements$Element_Attributes$verticalCenter,
-				_1: {
-					ctor: '::',
-					_0: _mdgriffith$style_elements$Element_Attributes$width(
-						_mdgriffith$style_elements$Element_Attributes$px(275)),
-					_1: {
-						ctor: '::',
-						_0: _mdgriffith$style_elements$Element_Attributes$padding(10),
-						_1: {ctor: '[]'}
-					}
-				}
-			}
-		},
-		A3(
-			_mdgriffith$style_elements$Element$column,
-			_user$project$Styles$FileEdit,
+var _user$project$View$fileCanBeSubmitted = function (status) {
+	return _elm_lang$core$Native_Utils.eq(status, _user$project$Model$EditingOk);
+};
+var _user$project$View$internalEditingModal = F2(
+	function (data, status) {
+		return A3(
+			_mdgriffith$style_elements$Element$modal,
+			_user$project$Styles$Modal,
 			{
 				ctor: '::',
 				_0: _mdgriffith$style_elements$Element_Attributes$center,
 				_1: {
 					ctor: '::',
-					_0: _mdgriffith$style_elements$Element_Attributes$spread,
-					_1: {ctor: '[]'}
+					_0: _mdgriffith$style_elements$Element_Attributes$verticalCenter,
+					_1: {
+						ctor: '::',
+						_0: _mdgriffith$style_elements$Element_Attributes$width(
+							_mdgriffith$style_elements$Element_Attributes$px(375)),
+						_1: {
+							ctor: '::',
+							_0: _mdgriffith$style_elements$Element_Attributes$padding(20),
+							_1: {ctor: '[]'}
+						}
+					}
 				}
 			},
-			{
-				ctor: '::',
-				_0: A3(
-					_mdgriffith$style_elements$Element$row,
-					_user$project$Styles$Header,
-					{
+			A3(
+				_mdgriffith$style_elements$Element$column,
+				_user$project$Styles$FileEdit,
+				{
+					ctor: '::',
+					_0: _mdgriffith$style_elements$Element_Attributes$center,
+					_1: {
 						ctor: '::',
 						_0: _mdgriffith$style_elements$Element_Attributes$spread,
 						_1: {ctor: '[]'}
-					},
-					{
-						ctor: '::',
-						_0: A3(
-							_mdgriffith$style_elements$Element$h1,
-							_user$project$Styles$Header,
-							{ctor: '[]'},
-							_mdgriffith$style_elements$Element$text('Edit File Data')),
-						_1: {
+					}
+				},
+				{
+					ctor: '::',
+					_0: A3(
+						_mdgriffith$style_elements$Element$row,
+						_user$project$Styles$Header,
+						{
+							ctor: '::',
+							_0: _mdgriffith$style_elements$Element_Attributes$spread,
+							_1: {ctor: '[]'}
+						},
+						{
 							ctor: '::',
 							_0: A3(
-								_mdgriffith$style_elements$Element$button,
-								_user$project$Styles$CloseButton,
-								{
-									ctor: '::',
-									_0: _mdgriffith$style_elements$Element_Events$onClick(_user$project$Model$CancelUpload),
-									_1: {ctor: '[]'}
-								},
-								_mdgriffith$style_elements$Element$text('x')),
-							_1: {ctor: '[]'}
-						}
-					}),
-				_1: {
-					ctor: '::',
-					_0: _mdgriffith$style_elements$Element$hairline(_user$project$Styles$FileEdit),
+								_mdgriffith$style_elements$Element$h1,
+								_user$project$Styles$Header,
+								{ctor: '[]'},
+								_mdgriffith$style_elements$Element$text('Edit File Data')),
+							_1: {
+								ctor: '::',
+								_0: A3(
+									_mdgriffith$style_elements$Element$button,
+									_user$project$Styles$CloseButton,
+									{
+										ctor: '::',
+										_0: _mdgriffith$style_elements$Element_Events$onClick(_user$project$Model$CancelUpload),
+										_1: {ctor: '[]'}
+									},
+									_mdgriffith$style_elements$Element$text('x')),
+								_1: {ctor: '[]'}
+							}
+						}),
 					_1: {
 						ctor: '::',
-						_0: A3(
-							_mdgriffith$style_elements$Element_Input$text,
-							_user$project$Styles$FileEditInput,
-							{ctor: '[]'},
-							{
-								onChange: function (_p0) {
-									return _user$project$Model$EditUpload(
-										_user$project$Model$ChangeFileName(_p0));
-								},
-								value: data.file.filename,
-								label: _mdgriffith$style_elements$Element_Input$labelLeft(
-									_mdgriffith$style_elements$Element$text('File name')),
-								options: {ctor: '[]'}
-							}),
+						_0: _mdgriffith$style_elements$Element$hairline(_user$project$Styles$FileEdit),
 						_1: {
 							ctor: '::',
 							_0: A3(
@@ -24916,55 +25295,93 @@ var _user$project$View$editModal = function (data) {
 								_user$project$Styles$FileEditInput,
 								{ctor: '[]'},
 								{
-									onChange: function (_p1) {
+									onChange: function (_p0) {
 										return _user$project$Model$EditUpload(
-											_user$project$Model$ChangeOwner(_p1));
+											_user$project$Model$ChangeFileName(_p0));
 									},
-									value: data.owner,
+									value: data.file.filename,
 									label: _mdgriffith$style_elements$Element_Input$labelLeft(
-										_mdgriffith$style_elements$Element$text('Owner')),
+										_mdgriffith$style_elements$Element$text('File name')),
 									options: {ctor: '[]'}
 								}),
 							_1: {
 								ctor: '::',
 								_0: A3(
-									_mdgriffith$style_elements$Element_Input$multiline,
+									_mdgriffith$style_elements$Element_Input$text,
 									_user$project$Styles$FileEditInput,
 									{ctor: '[]'},
 									{
-										onChange: function (_p2) {
+										onChange: function (_p1) {
 											return _user$project$Model$EditUpload(
-												_user$project$Model$ChangeDescription(_p2));
+												_user$project$Model$ChangeOwner(_p1));
 										},
-										value: data.description,
+										value: data.owner,
 										label: _mdgriffith$style_elements$Element_Input$labelLeft(
-											_mdgriffith$style_elements$Element$text('Description')),
+											_mdgriffith$style_elements$Element$text('Owner')),
 										options: {ctor: '[]'}
 									}),
 								_1: {
 									ctor: '::',
 									_0: A3(
-										_mdgriffith$style_elements$Element$button,
-										_user$project$Styles$SubmitButton,
+										_mdgriffith$style_elements$Element_Input$multiline,
+										_user$project$Styles$FileEditInput,
+										{ctor: '[]'},
 										{
-											ctor: '::',
-											_0: _mdgriffith$style_elements$Element_Events$onClick(
-												_user$project$Model$SaveFile(data)),
-											_1: {
+											onChange: function (_p2) {
+												return _user$project$Model$EditUpload(
+													_user$project$Model$ChangeDescription(_p2));
+											},
+											value: data.description,
+											label: _mdgriffith$style_elements$Element_Input$labelLeft(
+												_mdgriffith$style_elements$Element$text('Description')),
+											options: {ctor: '[]'}
+										}),
+									_1: {
+										ctor: '::',
+										_0: A3(
+											_mdgriffith$style_elements$Element$button,
+											_user$project$Styles$SubmitButton,
+											{
 												ctor: '::',
-												_0: _mdgriffith$style_elements$Element_Attributes$width(
-													_mdgriffith$style_elements$Element_Attributes$px(50)),
-												_1: {ctor: '[]'}
-											}
-										},
-										_mdgriffith$style_elements$Element$text('Upload')),
-									_1: {ctor: '[]'}
+												_0: _mdgriffith$style_elements$Element_Events$onClick(
+													_user$project$Model$SaveFile(data)),
+												_1: {
+													ctor: '::',
+													_0: _mdgriffith$style_elements$Element_Attributes$width(
+														_mdgriffith$style_elements$Element_Attributes$px(50)),
+													_1: {
+														ctor: '::',
+														_0: A2(
+															_mdgriffith$style_elements$Element_Attributes$vary,
+															_user$project$Styles$Disabled,
+															_user$project$View$fileCanBeSubmitted(status)),
+														_1: {
+															ctor: '::',
+															_0: A2(
+																_mdgriffith$style_elements$Element_Attributes$attribute,
+																'disabled',
+																_user$project$View$fileCanBeSubmitted(status) ? 'false' : 'true'),
+															_1: {ctor: '[]'}
+														}
+													}
+												}
+											},
+											_mdgriffith$style_elements$Element$text('Upload')),
+										_1: {ctor: '[]'}
+									}
 								}
 							}
 						}
 					}
-				}
-			}));
+				}));
+	});
+var _user$project$View$editingModal = function (fileEdited) {
+	var _p3 = fileEdited;
+	if (_p3.ctor === 'NotEditing') {
+		return _mdgriffith$style_elements$Element$empty;
+	} else {
+		return A2(_user$project$View$internalEditingModal, _p3._0, _p3._1);
+	}
 };
 var _user$project$View$view = function (model) {
 	return A2(
@@ -25045,7 +25462,7 @@ var _user$project$View$view = function (model) {
 							}),
 						_1: {
 							ctor: '::',
-							_0: A2(_mdgriffith$style_elements$Element$whenJust, model.fileEdited, _user$project$View$editModal),
+							_0: _user$project$View$editingModal(model.fileEdited),
 							_1: {ctor: '[]'}
 						}
 					}
@@ -25056,35 +25473,181 @@ var _user$project$View$view = function (model) {
 var _user$project$Main$subscriptions = function (model) {
 	return _user$project$Ports$fileContentRead(_user$project$Model$FileRead);
 };
-var _user$project$Main$editUpload = F2(
-	function (change, data) {
-		var _p0 = change;
-		switch (_p0.ctor) {
-			case 'ChangeOwner':
-				return _elm_lang$core$Native_Utils.update(
-					data,
-					{owner: _p0._0});
-			case 'ChangeDescription':
-				return _elm_lang$core$Native_Utils.update(
-					data,
-					{description: _p0._0});
-			default:
-				var file = data.file;
-				var newFile = _elm_lang$core$Native_Utils.update(
-					file,
-					{filename: _p0._0});
-				return _elm_lang$core$Native_Utils.update(
-					data,
-					{file: newFile});
+var _user$project$Main$validFileName = function (name) {
+	return A2(
+		_elm_lang$core$List$any,
+		function (extension) {
+			return A2(
+				_elm_lang$core$String$endsWith,
+				extension,
+				_elm_lang$core$String$toLower(name));
+		},
+		{
+			ctor: '::',
+			_0: '.jpg',
+			_1: {
+				ctor: '::',
+				_0: '.jpeg',
+				_1: {
+					ctor: '::',
+					_0: '.pdf',
+					_1: {
+						ctor: '::',
+						_0: '.xml',
+						_1: {ctor: '[]'}
+					}
+				}
+			}
+		});
+};
+var _user$project$Main$updateStatus = F2(
+	function (error, oldStatus) {
+		var _p0 = error;
+		if (_p0.ctor === 'Nothing') {
+			return (!_elm_lang$core$Native_Utils.eq(oldStatus, _user$project$Model$Pristine)) ? oldStatus : _user$project$Model$EditingOk;
+		} else {
+			var _p2 = _p0._0;
+			var existingErrors = function () {
+				var _p1 = oldStatus;
+				if (_p1.ctor === 'ValidationError') {
+					return _p1._0;
+				} else {
+					return {ctor: '[]'};
+				}
+			}();
+			return _user$project$Model$ValidationError(
+				A2(_elm_lang$core$List$member, _p2, existingErrors) ? existingErrors : {ctor: '::', _0: _p2, _1: existingErrors});
 		}
 	});
+var _user$project$Main$updateEditingField = F2(
+	function (change, _p3) {
+		var _p4 = _p3;
+		var _p8 = _p4._1;
+		var _p7 = _p4._0;
+		var _p5 = change;
+		switch (_p5.ctor) {
+			case 'ChangeOwner':
+				return {
+					ctor: '_Tuple2',
+					_0: _elm_lang$core$Native_Utils.update(
+						_p7,
+						{owner: _p5._0}),
+					_1: A2(_user$project$Main$updateStatus, _elm_lang$core$Maybe$Nothing, _p8)
+				};
+			case 'ChangeDescription':
+				return {
+					ctor: '_Tuple2',
+					_0: _elm_lang$core$Native_Utils.update(
+						_p7,
+						{description: _p5._0}),
+					_1: A2(_user$project$Main$updateStatus, _elm_lang$core$Maybe$Nothing, _p8)
+				};
+			default:
+				var _p6 = _p5._0;
+				var error = _user$project$Main$validFileName(_p6) ? _elm_lang$core$Maybe$Nothing : _elm_lang$core$Maybe$Just(_user$project$Model$UnsupportedFile);
+				var file = _p7.file;
+				var newFile = _elm_lang$core$Native_Utils.update(
+					file,
+					{filename: _p6});
+				return {
+					ctor: '_Tuple2',
+					_0: _elm_lang$core$Native_Utils.update(
+						_p7,
+						{file: newFile}),
+					_1: A2(_user$project$Main$updateStatus, error, _p8)
+				};
+		}
+	});
+var _user$project$Main$editUpload = F2(
+	function (change, data) {
+		var _p9 = data;
+		if (_p9.ctor === 'NotEditing') {
+			return data;
+		} else {
+			return A2(
+				_elm_lang$core$Basics$uncurry,
+				_user$project$Model$Editing,
+				A2(
+					_user$project$Main$updateEditingField,
+					change,
+					{ctor: '_Tuple2', _0: _p9._0, _1: _p9._1}));
+		}
+	});
+var _user$project$Main$fileDataDecoder = function () {
+	var fileDecoder = A3(
+		_elm_lang$core$Json_Decode$map2,
+		_user$project$Model$File,
+		A2(_elm_lang$core$Json_Decode$field, 'content', _elm_lang$core$Json_Decode$string),
+		A2(_elm_lang$core$Json_Decode$field, 'filename', _elm_lang$core$Json_Decode$string));
+	return A6(
+		_elm_lang$core$Json_Decode$map5,
+		_user$project$Model$FileData,
+		fileDecoder,
+		A2(_elm_lang$core$Json_Decode$field, 'owner', _elm_lang$core$Json_Decode$string),
+		A2(_elm_lang$core$Json_Decode$field, 'description', _elm_lang$core$Json_Decode$string),
+		A2(
+			_elm_lang$core$Json_Decode$field,
+			'createdAt',
+			A2(
+				_elm_lang$core$Json_Decode$map,
+				_elm_lang$core$Result$toMaybe,
+				A2(_elm_lang$core$Json_Decode$map, _elm_community$elm_time$Time_Date$fromISO8601, _elm_lang$core$Json_Decode$string))),
+		A2(
+			_elm_lang$core$Json_Decode$field,
+			'_id',
+			A2(_elm_lang$core$Json_Decode$map, _elm_lang$core$Maybe$Just, _elm_lang$core$Json_Decode$string)));
+}();
+var _user$project$Main$encodeFileData = function (data) {
+	return _elm_lang$core$Json_Encode$object(
+		{
+			ctor: '::',
+			_0: {
+				ctor: '_Tuple2',
+				_0: 'filename',
+				_1: _elm_lang$core$Json_Encode$string(data.file.filename)
+			},
+			_1: {
+				ctor: '::',
+				_0: {
+					ctor: '_Tuple2',
+					_0: 'owner',
+					_1: _elm_lang$core$Json_Encode$string(data.owner)
+				},
+				_1: {
+					ctor: '::',
+					_0: {
+						ctor: '_Tuple2',
+						_0: 'content',
+						_1: _elm_lang$core$Json_Encode$string(data.file.content)
+					},
+					_1: {
+						ctor: '::',
+						_0: {
+							ctor: '_Tuple2',
+							_0: 'description',
+							_1: _elm_lang$core$Json_Encode$string(data.description)
+						},
+						_1: {ctor: '[]'}
+					}
+				}
+			}
+		});
+};
 var _user$project$Main$sendSaveRequest = function (data) {
-	return _elm_lang$core$Platform_Cmd$none;
+	return A2(
+		_elm_lang$http$Http$send,
+		_user$project$Model$SaveResponse,
+		A3(
+			_elm_lang$http$Http$post,
+			'/files',
+			_elm_lang$http$Http$jsonBody(
+				_user$project$Main$encodeFileData(data)),
+			_user$project$Main$fileDataDecoder));
 };
 var _user$project$Main$update = F2(
 	function (msg, model) {
-		var _p1 = msg;
-		switch (_p1.ctor) {
+		var _p10 = msg;
+		switch (_p10.ctor) {
 			case 'FileSelected':
 				return {
 					ctor: '_Tuple2',
@@ -25092,15 +25655,17 @@ var _user$project$Main$update = F2(
 					_1: _user$project$Ports$fileSelected(model.id)
 				};
 			case 'FileRead':
-				var _p2 = _p1._0;
-				var newFile = {content: _p2.content, filename: _p2.filename};
+				var _p11 = _p10._0;
+				var newFile = {content: _p11.content, filename: _p11.filename};
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
 						model,
 						{
-							fileEdited: _elm_lang$core$Maybe$Just(
-								{file: newFile, owner: '', description: '', createdAt: _elm_lang$core$Maybe$Nothing, id: _elm_lang$core$Maybe$Nothing})
+							fileEdited: A2(
+								_user$project$Model$Editing,
+								{file: newFile, owner: '', description: '', createdAt: _elm_lang$core$Maybe$Nothing, id: _elm_lang$core$Maybe$Nothing},
+								_user$project$Model$Pristine)
 						}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
@@ -25108,29 +25673,47 @@ var _user$project$Main$update = F2(
 				return {
 					ctor: '_Tuple2',
 					_0: model,
-					_1: _user$project$Main$sendSaveRequest(_p1._0)
+					_1: _user$project$Main$sendSaveRequest(_p10._0)
 				};
 			case 'CancelUpload':
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
 						model,
-						{fileEdited: _elm_lang$core$Maybe$Nothing}),
+						{fileEdited: _user$project$Model$NotEditing}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
-			default:
+			case 'EditUpload':
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
 						model,
 						{
-							fileEdited: A2(
-								_elm_lang$core$Maybe$map,
-								_user$project$Main$editUpload(_p1._0),
-								model.fileEdited)
+							fileEdited: A2(_user$project$Main$editUpload, _p10._0, model.fileEdited)
 						}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
+			default:
+				if (_p10._0.ctor === 'Err') {
+					return A2(
+						_elm_lang$core$Debug$log,
+						A2(
+							_elm_lang$core$Basics_ops['++'],
+							'Save failed ',
+							_elm_lang$core$Basics$toString(_p10._0._0)),
+						{ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none});
+				} else {
+					return {
+						ctor: '_Tuple2',
+						_0: _elm_lang$core$Native_Utils.update(
+							model,
+							{
+								files: {ctor: '::', _0: _p10._0._0, _1: model.files},
+								fileEdited: _user$project$Model$NotEditing
+							}),
+						_1: _elm_lang$core$Platform_Cmd$none
+					};
+				}
 		}
 	});
 var _user$project$Main$init = {
@@ -25138,7 +25721,7 @@ var _user$project$Main$init = {
 	_0: {
 		id: 'ImageInputId',
 		files: {ctor: '[]'},
-		fileEdited: _elm_lang$core$Maybe$Nothing
+		fileEdited: _user$project$Model$NotEditing
 	},
 	_1: _elm_lang$core$Platform_Cmd$none
 };

@@ -3,6 +3,7 @@ module Model exposing (..)
 import Http
 import Time.Date exposing (Date)
 import Ports exposing (FilePortData)
+import Set exposing (Set)
 
 
 type Msg
@@ -39,8 +40,24 @@ type alias FileID =
     String
 
 
+type FileEdited
+    = NotEditing
+    | Editing FileData EditingStatus
+
+
+type EditingStatus
+    = Pristine
+    | EditingOk
+    | ValidationError (List FileValidationError)
+
+
+type FileValidationError
+    = NoFile
+    | UnsupportedFile
+
+
 type alias Model =
     { id : String
     , files : List FileData
-    , fileEdited : Maybe FileData
+    , fileEdited : FileEdited
     }

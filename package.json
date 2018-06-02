@@ -10,9 +10,11 @@
   },
   "devDependencies": {},
   "scripts": {
+    "build": "elm-make src/Main.elm --output dist/Main.js && cp src/index.html dist/index.html",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "json-server --middleware ./server.js --static dist db.json"
+
   },
-  "author": "",
+  "author": "Yoav Luft",
   "license": "ISC"
 }
